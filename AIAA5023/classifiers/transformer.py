@@ -89,8 +89,27 @@ class CaptioningTransformer(nn.Module):
         #     along with the tgt_mask. Project the output to scores per token      #
         ############################################################################
         # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
+        # Step 1: Embed captions and add positional encoding
+        caption_embeddings = self.embedding(captions)  # (N, T, wordvec_dim)
+        caption_embeddings = self.positional_encoding(caption_embeddings)
 
-        pass
+        # Step 2: Project image features to wordvec_dim
+        features_projected = self.visual_projection(features).unsqueeze(1)  # (N, 1, wordvec_dim)
+
+        # Step 3: Create target mask for causal attention
+        tgt_mask = torch.tril(torch.ones(T, T, device=captions.device)).bool()  # (T, T)
+        # print(tgt_mask.detach().numpy())
+
+        # Step 4: Pass through Transformer Decoder
+        transformer_output = self.transformer(
+            tgt=caption_embeddings,
+            memory=features_projected,
+            tgt_mask=tgt_mask
+        )  # (N, T, wordvec_dim)
+
+
+        # Step 5: Project output to vocabulary size
+        scores = self.output(transformer_output)  # (N, T, vocab_size)
 
         # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
         ############################################################################

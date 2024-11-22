@@ -38,7 +38,12 @@ class PositionalEncoding(nn.Module):
         ############################################################################
         # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
-        pass
+        position = torch.arange(0, max_len, dtype=torch.float32).unsqueeze(1)  # (max_len, 1)
+        div_term = torch.exp(torch.arange(0, embed_dim, 2, dtype=torch.float32) * (-math.log(10000.0) / embed_dim))  # (embed_dim // 2)
+
+        # 填充正弦和余弦函数
+        pe[0, :, 0::2] = torch.sin(position * div_term)  # 偶数维度使用正弦
+        pe[0, :, 1::2] = torch.cos(position * div_term)  # 奇数维度使用余弦
 
         # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
         ############################################################################
@@ -70,7 +75,8 @@ class PositionalEncoding(nn.Module):
         ############################################################################
         # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
-        pass
+        x = x + self.pe[:, :x.size(1), :]
+        output = self.dropout(x)
 
         # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
         ############################################################################
@@ -165,7 +171,38 @@ class MultiHeadAttention(nn.Module):
         ############################################################################
         # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
-        pass
+        H = self.n_head
+        d_k = E // H  # 每个头的特征维度
+
+        key : torch.Tensor = self.key(key)
+        query : torch.Tensor = self.query(query)
+        value : torch.Tensor = self.value(value)
+
+        # (N, S, H, d_k)
+        query = query.view(N, S, H, d_k)
+        key = key.view(N, T, H, d_k)
+        value = value.view(N, T, H, d_k)
+
+        # (N, H, S, d_k)
+        key = key.permute(0, 2, 1, 3)
+        query = query.permute(0, 2, 1, 3)
+        value = value.permute(0, 2, 1, 3)
+
+        # (Q * transpose(K)) / sqrt(d_k)
+        attention_scores = torch.matmul(query, key.transpose(-2, -1))
+        attention_scores = attention_scores / torch.sqrt(torch.tensor(d_k, dtype=query.dtype, device=query.device))
+        if attn_mask is not None:
+            attention_scores = torch.masked_fill(attention_scores, torch.logical_not(attn_mask.bool()), float("-inf"))
+        attention_scores = F.softmax(attention_scores, dim=-1)
+        
+        attention_weights = self.attn_drop(attention_scores)
+        
+        output = torch.matmul(attention_weights, value)
+        
+        
+        output = output.permute(0, 2, 1, 3).contiguous()
+        output = output.view(N, S, E)
+        output = self.proj(output)
 
         # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
         ############################################################################
